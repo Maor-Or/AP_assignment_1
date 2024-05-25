@@ -12,6 +12,21 @@
 #define PROMPTCOMMANDLENGTH 3
 #define AMOUNTOFSAVEDCOMMANDS 21
 
+// for saving variables:
+#define MAX_VAR_NAME 128
+#define MAX_VAR_VALUE 128
+#define MAX_VARS 100
+
+typedef struct Variable
+{
+    char name[MAX_VAR_NAME];
+    char value[MAX_VAR_VALUE];
+} Variable;
+
+// for saving variables:
+Variable variables[MAX_VARS];
+int var_count = 0;
+
 // Signal handler function for SIGINT
 void handle_sigint(int signum)
 {
@@ -64,6 +79,41 @@ char *intToStr(int num)
     return str;
 }
 
+void set_variable(const char *name, const char *value)
+{
+    for (int i = 0; i < var_count; i++)
+    {
+        if (strcmp(variables[i].name, name) == 0)
+        {
+            strncpy(variables[i].value, value, MAX_VAR_VALUE);
+            return;
+        }
+    }
+
+    if (var_count < MAX_VARS)
+    {
+        strncpy(variables[var_count].name, name, MAX_VAR_NAME);
+        strncpy(variables[var_count].value, value, MAX_VAR_VALUE);
+        var_count++;
+    }
+    else
+    {
+        fprintf(stderr, "Error: Maximum number of variables reached.\n");
+    }
+}
+
+char *get_variable(const char *name)
+{
+    for (int i = 0; i < var_count; i++)
+    {
+        if (strcmp(variables[i].name, name) == 0)
+        {
+            return variables[i].value;
+        }
+    }
+    return NULL;
+}
+
 int main(int argc, char *argv[])
 {
     // for changing the shell's prompt:
@@ -76,7 +126,7 @@ int main(int argc, char *argv[])
     char lastInputCommands[AMOUNTOFSAVEDCOMMANDS][128]; // for saving last AMOUNTOFSAVEDCOMMANDS in history
     int lastInputCommandsIndex = 0;
     int isHistoryCommand = 0;
-    char * historyCommandToExec;
+    char *historyCommandToExec;
 
     // Register the signal handler
     signal(SIGINT, handle_sigint);
@@ -85,27 +135,26 @@ int main(int argc, char *argv[])
 
     while (exitFlag)
     {
-        if (isHistoryCommand == 0)
-        {    
+        if (isHistoryCommand == 0 )
+        {
             printf("\033[1;34m%s \033[0m", prompt);
         }
-        
+
         // getting the command to run:
         char input[128] = {'\0'};
 
-        
         if (isHistoryCommand == 0)
         {
             fgets(input, sizeof(input), stdin);
         }
         else // isHistoryCommand == 1:
-        {strcpy(input,historyCommandToExec);} 
-        
+        {
+            strcpy(input, historyCommandToExec);
+        }
 
         // get the input into the history array:
         strcpy(lastInputCommands[lastInputCommandsIndex], input);
         lastInputCommandsIndex = (lastInputCommandsIndex + 1) % AMOUNTOFSAVEDCOMMANDS;
-
 
         // proccessing the data:
         input[strcspn(input, "\n")] = '\0'; // remove trailing newline
@@ -152,13 +201,34 @@ int main(int argc, char *argv[])
         // checking for "!!" command:
         if (!strcmp(inputArgs[0], "!!") && i == 1)
         {
-            char * lastCommand = lastInputCommands[(lastInputCommandsIndex-2)%AMOUNTOFSAVEDCOMMANDS];
+            char *lastCommand = lastInputCommands[(lastInputCommandsIndex - 2) % AMOUNTOFSAVEDCOMMANDS];
 
             isHistoryCommand = 1;
             historyCommandToExec = lastCommand;
             continue;
         }
         isHistoryCommand = 0;
+
+        if (inputArgs[0][0] == '$' &&!strcmp(inputArgs[1], "=")&&i == 3)
+        {
+            // Extract variable name
+            char *varName = inputArgs[0] + 1; // Skip the '$' character
+            
+            set_variable(varName, inputArgs[2]);
+
+            continue;
+        }
+
+        //checking for "read" command:
+        if (!strcmp(inputArgs[0], "read") && i == 2)
+        {
+            char inValue[MAX_VAR_NAME];
+            fgets(inValue, MAX_VAR_NAME, stdin);
+            set_variable(inputArgs[1],inValue);
+            continue;
+        }
+        //showPrompt = 1;
+        
 
         /* Does command line end with & */
         if (!strcmp(inputArgs[i - 1], "&"))
@@ -210,6 +280,11 @@ int main(int argc, char *argv[])
                     {
                         (strcpy(inputArgs[i], intToStr(prevCommandStatus)));
                     }
+                }
+                else if(inputArgs[i][0] == '$')
+                {
+                    char * varName = inputArgs[i]+1;
+                    (strcpy(inputArgs[i], get_variable(varName)));
                 }
             }
 
@@ -385,7 +460,7 @@ int main(int argc, char *argv[])
             else
             {
                 // running the command:
-                execvp(inputArgs[0], inputArgs);
+            execvp(inputArgs[0], inputArgs);
                 perror("execvp"); // print error message if execvp fails
                 return EXIT_FAILURE;
             }
