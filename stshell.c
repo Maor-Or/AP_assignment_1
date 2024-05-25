@@ -227,7 +227,6 @@ int main(int argc, char *argv[])
             set_variable(inputArgs[1],inValue);
             continue;
         }
-        //showPrompt = 1;
         
 
         /* Does command line end with & */
