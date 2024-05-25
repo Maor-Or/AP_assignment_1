@@ -8,35 +8,76 @@
 #include <sys/stat.h>
 
 #define ARGLENGTH 20
+#define PROMPTLENGTH 30
+#define PROMPTCOMMANDLENGTH 3
+#define AMOUNTOFSAVEDCOMMANDS 21
 
 // Signal handler function for SIGINT
 void handle_sigint(int signum)
 {
-    // caught the ctrl c
+    printf("You typed Control-C!\n");
 }
 
 // reorgenize the stdin and stdout to a file if we get >
 void stdChangeRight(char *fileName, int isAppend) // 0 means > , 1 means >>
 {
-    int f;
+    int fd;
 
     // Set the file permissions using octal representation (e.g., 0644)
     mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH; // File permissions: rw-r--r--
 
     if (isAppend)
     {
-        f = open(fileName, O_WRONLY | O_APPEND | O_CREAT, mode);
+        fd = open(fileName, O_WRONLY | O_APPEND | O_CREAT, mode);
     }
     else
     {
-        f = open(fileName, O_WRONLY | O_TRUNC | O_CREAT, mode);
+        fd = open(fileName, O_WRONLY | O_TRUNC | O_CREAT, mode);
     }
-    dup2(f, 1); // making the file to be the output
-    close(f);   // closing the file in the fd array
+    dup2(fd, 1); // making the file to be the output
+    close(fd);   // closing the file in the fd array
+}
+void stdChangeErrOutput(char *fileName)
+{
+    int fd;
+
+    // Set the file permissions using octal representation (e.g., 0644)
+    mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH; // File permissions: rw-r--r--
+
+    fd = open(fileName, O_WRONLY | O_TRUNC | O_CREAT, mode);
+    dup2(fd, STDERR_FILENO); // making the file to be the output
+    close(fd);               // closing the file in the fd array
+}
+
+char *intToStr(int num)
+{
+    // Calculate the maximum length needed for the string representation
+    // +2 accounts for possible negative sign and null terminator
+    int bufferSize = snprintf(NULL, 0, "%d", num) + 1;
+    char *str = (char *)malloc(bufferSize);
+
+    if (str != NULL)
+    {
+        snprintf(str, bufferSize, "%d", num);
+    }
+
+    return str;
 }
 
 int main(int argc, char *argv[])
 {
+    // for changing the shell's prompt:
+    char prompt[PROMPTLENGTH] = "hello:";
+
+    int amper;                                          // for the "&" sign, to know if the command should be running in parallel
+    int errFdFlag = -1;                                 // for the "2>" sign, to know if the error output should be redirected
+    int prevCommandStatus;                              // for keeping track on the previous command's status
+    int isPrevFlag = 0;                                 // for knowing if there was a command already
+    char lastInputCommands[AMOUNTOFSAVEDCOMMANDS][128]; // for saving last AMOUNTOFSAVEDCOMMANDS in history
+    int lastInputCommandsIndex = 0;
+    int isHistoryCommand = 0;
+    char * historyCommandToExec;
+
     // Register the signal handler
     signal(SIGINT, handle_sigint);
 
@@ -44,14 +85,33 @@ int main(int argc, char *argv[])
 
     while (exitFlag)
     {
-        printf("\033[1;34mMaorAndRaz~stshell: \033[0m");
+        if (isHistoryCommand == 0)
+        {    
+            printf("\033[1;34m%s \033[0m", prompt);
+        }
+        
         // getting the command to run:
         char input[128] = {'\0'};
-        fgets(input, sizeof(input), stdin);
+
+        
+        if (isHistoryCommand == 0)
+        {
+            fgets(input, sizeof(input), stdin);
+        }
+        else // isHistoryCommand == 1:
+        {strcpy(input,historyCommandToExec);} 
+        
+
+        // get the input into the history array:
+        strcpy(lastInputCommands[lastInputCommandsIndex], input);
+        lastInputCommandsIndex = (lastInputCommandsIndex + 1) % AMOUNTOFSAVEDCOMMANDS;
+
+
+        // proccessing the data:
         input[strcspn(input, "\n")] = '\0'; // remove trailing newline
 
-        // if "exit" we exit the shell:
-        if (strcmp("exit", input) == 0)
+        // if "quit" we exit the shell:
+        if (strcmp("quit", input) == 0)
         {
             return 0;
         }
@@ -68,13 +128,54 @@ int main(int argc, char *argv[])
         }
         inputArgs[i] = NULL; // last element must be NULL
 
+        /* Is command empty */
+        if (inputArgs[0] == NULL)
+            continue;
+
+        // checking for "prompt = something"
+        if (!strcmp(inputArgs[0], "prompt") && i > 1 && !strcmp(inputArgs[1], "=") && i == PROMPTCOMMANDLENGTH)
+        {
+            strcpy(prompt, inputArgs[i - 1]);
+            continue;
+        }
+
+        // checking for "cd dir" command:
+        if (!strcmp(inputArgs[0], "cd") && i == 2)
+        {
+            if (chdir(inputArgs[1]) != 0)
+            {
+                perror("chdir");
+            }
+            continue;
+        }
+
+        // checking for "!!" command:
+        if (!strcmp(inputArgs[0], "!!") && i == 1)
+        {
+            char * lastCommand = lastInputCommands[(lastInputCommandsIndex-2)%AMOUNTOFSAVEDCOMMANDS];
+
+            isHistoryCommand = 1;
+            historyCommandToExec = lastCommand;
+            continue;
+        }
+        isHistoryCommand = 0;
+
+        /* Does command line end with & */
+        if (!strcmp(inputArgs[i - 1], "&"))
+        {
+            amper = 1;
+            inputArgs[i - 1] = NULL;
+        }
+        else
+            amper = 0;
+
         // making a child to run the command:
         pid_t pid = fork();
 
         // the child proccess, we run the exec here
         if (pid == 0)
         {
-            // scanning the args for any of the following: < ,> ,>> ,|
+            // scanning the args for any of the following: < ,> ,>> ,|, 2>
             // indexes for these signs:
             int isRight = -1, isDoubleRight = -1, isPipe[2] = {-1}, pipeIter = 0, pipeGate[2];
 
@@ -99,6 +200,17 @@ int main(int argc, char *argv[])
                         isPipe[pipeIter++] = i;
                     }
                 }
+                else if (strcmp("2>", inputArgs[i]) == 0)
+                {
+                    errFdFlag = i;
+                }
+                else if (strcmp("$?", inputArgs[i]) == 0)
+                {
+                    if (isPrevFlag == 1)
+                    {
+                        (strcpy(inputArgs[i], intToStr(prevCommandStatus)));
+                    }
+                }
             }
 
             if (isRight != -1)
@@ -110,6 +222,12 @@ int main(int argc, char *argv[])
             {
                 stdChangeRight(inputArgs[isDoubleRight + 1], 1);
                 inputArgs[isDoubleRight] = NULL;
+            }
+
+            if (errFdFlag != -1)
+            {
+                stdChangeErrOutput(inputArgs[errFdFlag + 1]);
+                inputArgs[errFdFlag] = NULL;
             }
 
             if (pipeIter == 1) // one pipe needed
@@ -278,10 +396,15 @@ int main(int argc, char *argv[])
             int status;
 
             // waiting for child to finish, and checking status:
-            pid_t wpid = wait(&status);
-            if (wpid == -1)
+            if (amper == 0)
             {
-                perror("wait");
+                pid_t wpid = wait(&status);
+                prevCommandStatus = status;
+                isPrevFlag = 1;
+                if (wpid == -1)
+                {
+                    perror("wait");
+                }
             }
         }
     }

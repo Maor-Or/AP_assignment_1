@@ -1,7 +1,7 @@
 CC = gcc
 FLAGS = -Wall
 
-all:cmp copy stshell libcodecA.so libcodecB.so encode decode
+all:stshell
 
 
 copy: copy.o
