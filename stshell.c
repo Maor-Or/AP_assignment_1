@@ -6,6 +6,13 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <readline/readline.h>
+#include <readline/history.h>
+
 
 #define ARGLENGTH 20
 #define PROMPTLENGTH 30
@@ -31,14 +38,16 @@ Variable variables[MAX_VARS];
 int var_count = 0;
 
 // for changing the shell's prompt:
-char prompt[PROMPTLENGTH] = "hello:";
+char promptDefault[PROMPTLENGTH] = "\033[1;34m \033[0m";
+char prompt[PROMPTLENGTH] = "hello: ";
+char fullPromt[PROMPTLENGTH] = {'\0'};
 
 // Signal handler function for SIGINT
 void handle_sigint(int signum)
 {
     printf("\nYou typed Control-C!\n");
     fflush(stdout); // Ensure the message is displayed immediately
-    printf("\033[1;34m%s \033[0m", prompt);
+    printf("%s", prompt);
     fflush(stdout); // Ensure the message is displayed immediately
 }
 
@@ -123,6 +132,11 @@ char *get_variable(const char *name)
     return NULL;
 }
 
+void editPromt(char * promptWord)
+{
+
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -141,6 +155,7 @@ int main(int argc, char *argv[])
     char inputElse[128]= {'\0'};
     int isIfTrue = -1;
     int isElseDetected = 0;
+    char* input2;
 
     // Register the signal handler
     signal(SIGINT, handle_sigint);
@@ -149,22 +164,40 @@ int main(int argc, char *argv[])
 
     while (exitFlag)
     {
-        if (if_flag) // print > if we are in if
+        if (if_flag) // in case of if-then-else replace the prompt with the '>' sign"
         {
-            printf("\033[1;34m> \033[0m");
-        }
-        else if (isHistoryCommand == 0)
-        {
-            printf("\033[1;34m%s \033[0m", prompt);
+        //instead of fgets:
+        input2 = readline("> ");
+
+        if (!input2) {
+            break; // EOF received
         }
 
-        // getting the command to run:
-        if (isHistoryCommand == 0)
-        {
-            fgets(input, sizeof(input), stdin);
+        // Add input to history
+        add_history(input2);
+                strcpy(input, input2);
+
         }
+
+        else if (isHistoryCommand == 0)
+        {
+            //instead of fgets:
+        input2 = readline(prompt);
+
+        if (!input2) {
+            break; // EOF received
+        }
+
+        // Add input to history
+        add_history(input2);
+        strcpy(input, input2);
+
+        }
+
+
         else // isHistoryCommand == 1:
         {
+            //printf("%s",prompt);
             strcpy(input, historyCommandToExec);
         }
 
