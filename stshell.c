@@ -17,6 +17,9 @@
 #define MAX_VAR_VALUE 128
 #define MAX_VARS 100
 
+//for max piping amount:
+#define MAX_PIPES 20
+
 typedef struct Variable
 {
     char name[MAX_VAR_NAME];
@@ -264,10 +267,64 @@ int main(int argc, char *argv[])
                 }
                 else if (strcmp("|", inputArgs[i]) == 0)
                 {
-                    if (pipeIter < 2)
-                    {
-                        isPipe[pipeIter++] = i;
-                    }
+                    // if we have |
+				if (strcmp(inputArgs[i], "|") == 0)
+				{
+					int fd[2];
+					if (pipe(fd) < 0)
+					{
+						perror("Error");
+						return 1;
+					}
+					int id2 = fork();
+					if (id2 < 0)
+					{
+						perror("Error");
+						return 1;
+					}
+					if (id2 == 0)
+					{ 
+						//the first command: <first> | <second>
+						close(fd[0]);
+						int j = 0;
+						char *argv1[MAX_PIPES];
+						while (strcmp(inputArgs[j], "|"))
+						{
+							argv1[j] = inputArgs[j];
+							j++;
+						}
+						argv1[j] = NULL;
+						if (dup2(fd[1], 1) < 0) // stdout of grandchild == fd[1] -> write to pipe
+						{
+							perror("Error");
+							return 1;
+						}
+						close(fd[1]);
+						execvp(argv1[0], argv1);
+					}
+					else
+					{ 
+						//the second command: <first> | <second>
+						int j = 0;
+						int k =i+1;
+						while (inputArgs[k] != NULL)
+						{
+							inputArgs[j] = inputArgs[k];
+							j++;
+							k++;
+						}
+						i = -1;
+						inputArgs[j] = NULL;
+						close(fd[1]);
+						if (dup2(fd[0], 0) < 0) // stdin of child == fd[0] -> read of pipe
+						{
+							perror("Error");
+							return 1;
+						}
+						close(fd[0]);
+						wait(NULL);
+					}
+				}
                 }
                 else if (strcmp("2>", inputArgs[i]) == 0)
                 {
