@@ -13,7 +13,6 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-
 #define ARGLENGTH 20
 #define PROMPTLENGTH 30
 #define PROMPTCOMMANDLENGTH 3
@@ -78,6 +77,7 @@ void stdChangeErrOutput(char *fileName)
     mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH; // File permissions: rw-r--r--
 
     fd = open(fileName, O_WRONLY | O_TRUNC | O_CREAT, mode);
+
     dup2(fd, STDERR_FILENO); // making the file to be the output
     close(fd);               // closing the file in the fd array
 }
@@ -132,30 +132,26 @@ char *get_variable(const char *name)
     return NULL;
 }
 
-void editPromt(char * promptWord)
-{
-
-}
-
 int main(int argc, char *argv[])
 {
 
     int amper;                                          // for the "&" sign, to know if the command should be running in parallel
-    int errFdFlag = -1;                                 // for the "2>" sign, to know if the error output should be redirected
     int prevCommandStatus;                              // for keeping track on the previous command's status
     int isPrevFlag = 0;                                 // for knowing if there was a command already
     char lastInputCommands[AMOUNTOFSAVEDCOMMANDS][128]; // for saving last AMOUNTOFSAVEDCOMMANDS in history
+    // char lastInputCommand[128] = {'\0'};
     int lastInputCommandsIndex = 0;
     int isHistoryCommand = 0;
     char *historyCommandToExec;
-    int status;
+    char *lastCommand;
+    int status = -1;
     int if_flag = 0;
     char input[128] = {'\0'};
-    char inputThen[128]= {'\0'};
-    char inputElse[128]= {'\0'};
+    char inputThen[128] = {'\0'};
+    char inputElse[128] = {'\0'};
     int isIfTrue = -1;
     int isElseDetected = 0;
-    char* input2;
+    char *input2;
 
     // Register the signal handler
     signal(SIGINT, handle_sigint);
@@ -164,52 +160,53 @@ int main(int argc, char *argv[])
 
     while (exitFlag)
     {
+
         if (if_flag) // in case of if-then-else replace the prompt with the '>' sign"
         {
-        //instead of fgets:
-        input2 = readline("> ");
+            // instead of fgets:
+            input2 = readline("> ");
 
-        if (!input2) {
-            break; // EOF received
-        }
+            if (!input2)
+            {
+                break; // EOF received
+            }
 
-        // Add input to history
-        add_history(input2);
-                strcpy(input, input2);
-
+            // Add input to history
+            add_history(input2);
+            strcpy(input, input2);
         }
 
         else if (isHistoryCommand == 0)
         {
-            //instead of fgets:
-        input2 = readline(prompt);
+            // instead of fgets:
+            input2 = readline(prompt);
 
-        if (!input2) {
-            break; // EOF received
+            if (!input2)
+            {
+                break; // EOF received
+            }
+
+            // Add input to history
+            add_history(input2);
+            strcpy(input, input2);
         }
-
-        // Add input to history
-        add_history(input2);
-        strcpy(input, input2);
-
-        }
-
 
         else // isHistoryCommand == 1:
         {
-            //printf("%s",prompt);
             strcpy(input, historyCommandToExec);
         }
+
+        isHistoryCommand = 0;
 
         /* if-then-else-fi part start*/
 
         if (if_flag == 1)
         { // after if search for then
-        isIfTrue = 0;
+            isIfTrue = 0;
             if (strncmp(input, "then", 4) == 0)
             {
                 strncpy(inputThen, input, sizeof(input) - 1);
-                strncpy(inputThen, inputThen+4, sizeof(inputThen) - 5);
+                strncpy(inputThen, inputThen + 4, sizeof(inputThen) - 5);
                 if_flag = 2;
             }
             else
@@ -227,14 +224,13 @@ int main(int argc, char *argv[])
             {
                 isIfTrue = 1;
             }
-
         }
         if (if_flag == 3)
         { // after then-input, search for else
             if (strncmp(input, "else", 4) == 0)
             {
                 strncpy(inputElse, input, sizeof(input) - 1);
-                strncpy(inputElse, inputElse+4, sizeof(inputElse) - 5);
+                strncpy(inputElse, inputElse + 4, sizeof(inputElse) - 5);
 
                 isElseDetected = 1;
                 if_flag = 5;
@@ -265,7 +261,7 @@ int main(int argc, char *argv[])
                 if_flag = 0;
                 if (isIfTrue == 1)
                 {
-                strncpy(input, inputThen, sizeof(input) - 1);
+                    strncpy(input, inputThen, sizeof(input) - 1);
                 }
                 else
                 {
@@ -274,8 +270,8 @@ int main(int argc, char *argv[])
                         if_flag = 0;
                         continue;
                     }
-                    
-                strncpy(input, inputElse, sizeof(input) - 1);
+
+                    strncpy(input, inputElse, sizeof(input) - 1);
                 }
                 inputThen[0] = '\0';
                 inputElse[0] = '\0';
@@ -294,7 +290,6 @@ int main(int argc, char *argv[])
             if_flag = 1;
             // remove if from the input
             strncpy(input, input + 3, sizeof(input) - 1);
-
         }
 
         if (if_flag == 0)
@@ -333,6 +328,8 @@ int main(int argc, char *argv[])
         if (!strcmp(inputArgs[0], "prompt") && i > 1 && !strcmp(inputArgs[1], "=") && i == PROMPTCOMMANDLENGTH)
         {
             strcpy(prompt, inputArgs[i - 1]);
+            // Concatenate a space to the end of the prompt
+            strcat(prompt, " ");
             continue;
         }
 
@@ -349,13 +346,14 @@ int main(int argc, char *argv[])
         // checking for "!!" command:
         if (!strcmp(inputArgs[0], "!!") && i == 1)
         {
-            char *lastCommand = lastInputCommands[(lastInputCommandsIndex - 2) % AMOUNTOFSAVEDCOMMANDS];
+            if (status == -1)
+                continue;
+            lastCommand = lastInputCommands[(lastInputCommandsIndex - 2) % AMOUNTOFSAVEDCOMMANDS];
 
             isHistoryCommand = 1;
             historyCommandToExec = lastCommand;
             continue;
         }
-        isHistoryCommand = 0;
 
         if (inputArgs[0][0] == '$' && !strcmp(inputArgs[1], "=") && i == 3)
         {
@@ -394,6 +392,7 @@ int main(int argc, char *argv[])
             // scanning the args for any of the following: < ,> ,>> ,|, 2>
             // indexes for these signs:
             int isRight = -1, isDoubleRight = -1;
+            int errFdFlag = -1;
 
             for (int i = 0; i < ARGLENGTH; i++)
             {
@@ -408,6 +407,10 @@ int main(int argc, char *argv[])
                 else if (strcmp(">>", inputArgs[i]) == 0)
                 {
                     isDoubleRight = i;
+                }
+                else if (strcmp("2>", inputArgs[i]) == 0)
+                {
+                    errFdFlag = i;
                 }
                 else if (strcmp("|", inputArgs[i]) == 0)
                 {
@@ -470,10 +473,7 @@ int main(int argc, char *argv[])
                         }
                     }
                 }
-                else if (strcmp("2>", inputArgs[i]) == 0)
-                {
-                    errFdFlag = i;
-                }
+
                 else if (strcmp("$?", inputArgs[i]) == 0)
                 {
                     if (isPrevFlag == 1)
@@ -488,42 +488,40 @@ int main(int argc, char *argv[])
                 }
             }
 
-            if (isRight != -1)
-            {
-                stdChangeRight(inputArgs[isRight + 1], 0);
-                inputArgs[isRight] = NULL;
-            }
-            if (isDoubleRight != -1)
-            {
-                stdChangeRight(inputArgs[isDoubleRight + 1], 1);
-                inputArgs[isDoubleRight] = NULL;
-            }
-
             if (errFdFlag != -1)
             {
                 stdChangeErrOutput(inputArgs[errFdFlag + 1]);
                 inputArgs[errFdFlag] = NULL;
             }
 
-            else
+            if (isDoubleRight != -1)
             {
-                // Redirect stdout to /dev/null if if_flag is 1
-                if (if_flag == 1)
-                {
-                    int devNull = open("/dev/null", O_WRONLY);
-                    if (devNull == -1)
-                    {
-                        perror("open");
-                        exit(EXIT_FAILURE); // Exit the child process with failure
-                    }
-                    dup2(devNull, STDOUT_FILENO);
-                    close(devNull);
-                }
-                // running the command:
-                execvp(inputArgs[0], inputArgs);
-                perror("execvp"); // print error message if execvp fails
-                return EXIT_FAILURE;
+                stdChangeRight(inputArgs[isDoubleRight + 1], 1);
+                inputArgs[isDoubleRight] = NULL;
             }
+            if (isRight != -1)
+            {
+                stdChangeRight(inputArgs[isRight + 1], 0);
+                inputArgs[isRight] = NULL;
+            }
+
+            // Redirect stdout to /dev/null if if_flag is 1
+            if (if_flag == 1)
+            {
+                int devNull = open("/dev/null", O_WRONLY);
+                if (devNull == -1)
+                {
+                    perror("open");
+                    exit(EXIT_FAILURE); // Exit the child process with failure
+                }
+                dup2(devNull, STDOUT_FILENO);
+                close(devNull);
+            }
+            // running the command:
+            execvp(inputArgs[0], inputArgs);
+
+            perror("execvp"); // print error message if execvp fails
+            return EXIT_FAILURE;
         }
         // parent's proccess:
         else
