@@ -1,10 +1,10 @@
 CC = gcc
 FLAGS = -Wall
 
-all:stshell
+all:myshell
 
-stshell:stshell.o
-	$(CC) $(FLAGS) stshell.o -o stshell -lreadline
+myshell:stshell.o
+	$(CC) $(FLAGS) stshell.o -o myshell -lreadline
 
 stshell.o:stshell.c
 	$(CC) $(FLAGS) -c stshell.c
@@ -13,4 +13,4 @@ stshell.o:stshell.c
 .PHONY: clean all
 
 clean:
-	rm -f *.o   stshell
+	rm -f *.o   myshell
