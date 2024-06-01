@@ -1,7 +1,7 @@
-make clean; make all; ./stshell 
-rm -f *.o   stshell
+make clean; make all; ./myshell 
+rm -f *.o   myshell
 gcc -Wall -c stshell.c
-gcc -Wall stshell.o -o stshell -lreadline
+gcc -Wall stshell.o -o myshell -lreadline
 hello: date >> myfile
 hello: cat myfile 
 Sat 01 Jun 2024 02:49:08 PM IDT
