@@ -1,0 +1,41 @@
+make clean; make all; ./stshell 
+rm -f *.o   stshell
+gcc -Wall -c stshell.c
+gcc -Wall stshell.o -o stshell -lreadline
+hello: date >> myfile
+hello: cat myfile 
+Sat 01 Jun 2024 02:49:08 PM IDT
+hello: date -u >> myfile 
+hello: cat myfile 
+Sat 01 Jun 2024 02:49:08 PM IDT
+Sat 01 Jun 2024 11:49:23 AM UTC
+hello: prompt = hi:
+hi: mkdir dir
+hi: cd dir
+hi: pwd
+/home/maor/Desktop/AP/assignment_1/AP_assignment_1/dir
+hi: touch f1
+hi: ls
+f1
+hi: !!
+f1
+hi: echo asd dsa
+asd dsa
+hi: ls
+f1
+hi: echo $?
+0
+hi: ls no_real_file
+ls: cannot access 'no_real_file': No such file or directory
+hi: echo $?
+512
+hi: ls no_real_file 2> file
+hi: ^C
+You typed Control-C!
+hi: cat file
+ls: cannot access 'no_real_file': No such file or directory
+hi: cat file | cat | cat | cat
+ls: cannot access 'no_real_file': No such file or directory
+hi: sort file | uniq -c | sort -r | head -3
+      1 ls: cannot access 'no_real_file': No such file or directory
+hi: quit
